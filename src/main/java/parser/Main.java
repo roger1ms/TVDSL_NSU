@@ -12,7 +12,7 @@ import java.util.List;
 public class Main {
     public static void main(String[] args) {
         if (args.length < 1) {
-            System.out.println("Usage: java homework2.Main <input.funny>");
+            System.out.println("Usage: java parser.Main <input.funny>");
             return;
         }
 
