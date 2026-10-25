@@ -1,12 +1,11 @@
 package parser;
 
 import lexer.Token;
+import parser.AST.*;
+
 import java.util.*;
 
 public class Parser {
-    // ============================================================
-    //  Helpers
-    // ============================================================
     private List<Token> tokens;
     private int pos;
 
@@ -45,47 +44,49 @@ public class Parser {
         return getAndNext();
     }
 
+    // Вспомогательный метод для установки позиции
+    private <T extends AST> T withPos(T node, Token t) {
+        node.line = t.line;
+        node.col = t.col;
+        return node;
+    }
+
     // ============================================================
     //  Expressions
     // ============================================================
 
-    // addExpr = mulExpr { ("+" | "-") mulExpr }
     public AST parseAddExpr() {
         AST left = parseMulExpr();
-
         while (check("PLUS") || check("MINUS")) {
+            Token opTok = peek();
             String op = getAndNext().lexeme;
             AST right = parseMulExpr();
-            left = new BinOp(op, left, right);
+            left = withPos(new BinOp(op, left, right), opTok);
         }
-
         return left;
     }
 
-    // mulExpr = atom { ("*" | "/") atom }
     public AST parseMulExpr() {
         AST left = parseAtom();
-
         while (check("STAR") || check("SLASH")) {
+            Token opTok = peek();
             String op = getAndNext().lexeme;
             AST right = parseAtom();
-            left = new BinOp(op, left, right);
+            left = withPos(new BinOp(op, left, right), opTok);
         }
-
         return left;
     }
 
-    // atom = INT | IDENT [ "(" args ")" | "[" expr "]" ] | "-" atom | "(" expr ")"
     public AST parseAtom() {
         Token t = peek();
 
         if (check("INT")) {
             getAndNext();
-            return new IntLit(Integer.parseInt(t.lexeme));
+            return withPos(new IntLit(Integer.parseInt(t.lexeme)), t);
         }
         if (check("MINUS")) {
             getAndNext();
-            return new UnOp("-", parseAtom());
+            return withPos(new UnOp("-", parseAtom()), t);
         }
         if (check("LPAREN")) {
             getAndNext();
@@ -99,7 +100,7 @@ public class Parser {
                 getAndNext();
                 AST idx = parseAddExpr();
                 expect("RBRACKET");
-                return new Index(new Ident(t.lexeme), idx);
+                return withPos(new Index(withPos(new Ident(t.lexeme), t), idx), t);
             }
             if (check("LPAREN")) {
                 getAndNext();
@@ -109,9 +110,9 @@ public class Parser {
                     while (match("COMMA")) args.add(parseAddExpr());
                 }
                 expect("RPAREN");
-                return new Call(t.lexeme, args);
+                return withPos(new Call(t.lexeme, args), t);
             }
-            return new Ident(t.lexeme);
+            return withPos(new Ident(t.lexeme), t);
         }
         throw new ParseError("unexpected " + t.name + " at " + t.line + ":" + t.col);
     }
@@ -120,59 +121,61 @@ public class Parser {
     //  Conditions
     // ============================================================
 
-    // condition = impl
-    public AST parseCondition() {
-        return parseImpl();
-    }
+    public AST parseCondition() { return parseImpl(); }
 
-    // impl = orExpr [ "->" impl ]
     public AST parseImpl() {
         AST left = parseOrExpr();
-        if (match("IMPL")) {
+        if (check("IMPL")) {
+            Token t = peek();
+            getAndNext();
             AST right = parseImpl();
-            return new BinOp("->", left, right);
+            return withPos(new BinOp("->", left, right), t);
         }
         return left;
     }
 
-    // orExpr = andExpr { "or" andExpr }
     public AST parseOrExpr() {
         AST left = parseAndExpr();
-        while (match("OR")) {
+        while (check("OR")) {
+            Token t = peek();
+            getAndNext();
             AST right = parseAndExpr();
-            left = new BinOp("or", left, right);
+            left = withPos(new BinOp("or", left, right), t);
         }
         return left;
     }
 
-    // andExpr = notExpr { "and" notExpr }
     public AST parseAndExpr() {
         AST left = parseNotExpr();
-        while (match("AND")) {
+        while (check("AND")) {
+            Token t = peek();
+            getAndNext();
             AST right = parseNotExpr();
-            left = new BinOp("and", left, right);
+            left = withPos(new BinOp("and", left, right), t);
         }
         return left;
     }
 
-    // notExpr = "not" notExpr | primary
     public AST parseNotExpr() {
-        if (match("NOT")) {
+        if (check("NOT")) {
+            Token t = peek();
+            getAndNext();
             AST right = parseNotExpr();
-            return new UnOp("not", right);
+            return withPos(new UnOp("not", right), t);
         }
         return parsePrimary();
     }
 
-    // primary = "true" | "false" | comparison | "(" condition ")"
     public AST parsePrimary() {
         if (check("TRUE")) {
+            Token t = peek();
             getAndNext();
-            return new BoolLit(true);
+            return withPos(new BoolLit(true), t);
         }
         if (check("FALSE")) {
+            Token t = peek();
             getAndNext();
-            return new BoolLit(false);
+            return withPos(new BoolLit(false), t);
         }
         if (check("LPAREN")) {
             getAndNext();
@@ -183,15 +186,14 @@ public class Parser {
         return parseComparison();
     }
 
-    // comparison = expr [ ("==" | "!=" | "<" | ">" | "<=" | ">=") expr ]
     public AST parseComparison() {
         AST left = parseAddExpr();
-
         if (check("EQ") || check("NEQ") || check("LT")
                 || check("GT") || check("LE") || check("GE")) {
+            Token t = peek();
             String op = getAndNext().lexeme;
             AST right = parseAddExpr();
-            return new Compare(op, left, right);
+            return withPos(new Compare(op, left, right), t);
         }
         return left;
     }
@@ -200,61 +202,64 @@ public class Parser {
     //  Predicates
     // ============================================================
 
-    // predicate = predImpl
-    public AST parsePredicate() {
-        return parsePredImpl();
-    }
+    public AST parsePredicate() { return parsePredImpl(); }
 
-    // predImpl = predOr [ "->" predImpl ]
     public AST parsePredImpl() {
         AST left = parsePredOr();
-        if (match("IMPL")) {
+        if (check("IMPL")) {
+            Token t = peek();
+            getAndNext();
             AST right = parsePredImpl();
-            return new BinOp("->", left, right);
+            return withPos(new BinOp("->", left, right), t);
         }
         return left;
     }
 
-    // predOr = predAnd { "or" predAnd }
     public AST parsePredOr() {
         AST left = parsePredAnd();
-        while (match("OR")) {
+        while (check("OR")) {
+            Token t = peek();
+            getAndNext();
             AST right = parsePredAnd();
-            left = new BinOp("or", left, right);
+            left = withPos(new BinOp("or", left, right), t);
         }
         return left;
     }
 
-    // predAnd = predNot { "and" predNot }
     public AST parsePredAnd() {
         AST left = parsePredNot();
-        while (match("AND")) {
+        while (check("AND")) {
+            Token t = peek();
+            getAndNext();
             AST right = parsePredNot();
-            left = new BinOp("and", left, right);
+            left = withPos(new BinOp("and", left, right), t);
         }
         return left;
     }
 
-    // predNot = "not" predNot | predPrimary
     public AST parsePredNot() {
-        if (match("NOT")) {
+        if (check("NOT")) {
+            Token t = peek();
+            getAndNext();
             AST right = parsePredNot();
-            return new UnOp("not", right);
+            return withPos(new UnOp("not", right), t);
         }
         return parsePredPrimary();
     }
 
-    // predPrimary = quantifier | formulaRef | "true" | "false" | comparison | "(" predicate ")"
     public AST parsePredPrimary() {
         if (check("TRUE")) {
+            Token t = peek();
             getAndNext();
-            return new BoolLit(true);
+            return withPos(new BoolLit(true), t);
         }
         if (check("FALSE")) {
+            Token t = peek();
             getAndNext();
-            return new BoolLit(false);
+            return withPos(new BoolLit(false), t);
         }
         if (check("FORALL") || check("EXISTS")) {
+            Token startTok = peek();
             boolean isForall = check("FORALL");
             getAndNext();
             expect("LPAREN");
@@ -262,7 +267,7 @@ public class Parser {
             expect("PIPE");
             AST predicate = parsePredicate();
             expect("RPAREN");
-            return new Quantifier(isForall, p.name, p.type, predicate);
+            return withPos(new Quantifier(isForall, p.name, p.type, predicate), startTok);
         }
         if (check("IDENT") && peek(1).name.equals("LPAREN")) {
             Token id = getAndNext();
@@ -273,7 +278,7 @@ public class Parser {
                 while (match("COMMA")) args.add(parseAddExpr());
             }
             expect("RPAREN");
-            return new FormulaRef(id.lexeme, args);
+            return withPos(new FormulaRef(id.lexeme, args), id);
         }
         return parseComparison();
     }
@@ -282,7 +287,6 @@ public class Parser {
     //  Statements
     // ============================================================
 
-    // statement = block | if | while | assert | assume | assign
     public AST parseStatement() {
         if (check("LBRACE")) return parseBlock();
         if (check("IF"))     return parseIf();
@@ -295,19 +299,19 @@ public class Parser {
         throw new ParseError("unexpected " + t.name + " at " + t.line + ":" + t.col);
     }
 
-    // block = "{" { statement } "}"
     public AST parseBlock() {
+        Token t = peek();
         expect("LBRACE");
         List<AST> statements = new ArrayList<>();
         while (!check("RBRACE")) {
             statements.add(parseStatement());
         }
         expect("RBRACE");
-        return new Block(statements);
+        return withPos(new Block(statements), t);
     }
 
-    // if = "if" "(" condition ")" statement [ "else" statement ]
     public AST parseIf() {
+        Token t = peek();
         expect("IF");
         expect("LPAREN");
         AST cond = parseCondition();
@@ -318,11 +322,11 @@ public class Parser {
             getAndNext();
             stmtElse = parseStatement();
         }
-        return new If(cond, stmtIf, stmtElse);
+        return withPos(new If(cond, stmtIf, stmtElse), t);
     }
 
-    // while = "while" "(" condition ")" [ "invariant" predicate ] statement
     public AST parseWhile() {
+        Token t = peek();
         expect("WHILE");
         expect("LPAREN");
         AST cond = parseCondition(), predicate = null;
@@ -333,48 +337,46 @@ public class Parser {
             predicate = parsePredicate();
         }
         AST stmtWhile = parseStatement();
-        return new While(cond, predicate, stmtWhile);
+        return withPos(new While(cond, predicate, stmtWhile), t);
     }
 
-    // assert = "assert" predicate ";"
     public AST parseAssert() {
+        Token t = peek();
         expect("ASSERT");
         AST predicate = parsePredicate();
         expect("SEMI");
-        return new Assert(predicate);
+        return withPos(new Assert(predicate), t);
     }
 
-    // assume = "assume" predicate ";"
     public AST parseAssume() {
+        Token t = peek();
         expect("ASSUME");
         AST predicate = parsePredicate();
         expect("SEMI");
-        return new Assume(predicate);
+        return withPos(new Assume(predicate), t);
     }
 
-    // assign = IDENT [ "[" expr "]" ] "=" expr ";"
     public AST parseAssign() {
         Token id = expect("IDENT");
-        AST target = new Ident(id.lexeme);
+        AST target = withPos(new Ident(id.lexeme), id);
 
         if (check("LBRACKET")) {
             getAndNext();
             AST idx = parseAddExpr();
             expect("RBRACKET");
-            target = new Index(target, idx);
+            target = withPos(new Index(target, idx), id);
         }
 
         expect("ASSIGN");
         AST value = parseAddExpr();
         expect("SEMI");
-        return new Assign(target, value);
+        return withPos(new Assign(target, value), id);
     }
 
     // ============================================================
-    //  Functions (top level)
+    //  Functions
     // ============================================================
 
-    // program = { function }
     public AST parseProgram() {
         List<AST> items = new ArrayList<>();
         while (!check("EOF")) {
@@ -405,7 +407,6 @@ public class Parser {
         return new Program(items);
     }
 
-    // function = IDENT "(" paramList ")" [requires] "returns" returnList [ensures] [uses] statement
     public AST parseFunction() {
         Token t = expect("IDENT");
         expect("LPAREN");
@@ -421,10 +422,9 @@ public class Parser {
         }
         AST body = parseStatement();
 
-        return new Function(t.lexeme, params, returns, requires, ensures, uses, body);
+        return withPos(new Function(t.lexeme, params, returns, requires, ensures, uses, body), t);
     }
 
-    // paramList = [ param { "," param } ]
     public List<Param> parseParamList() {
         List<Param> params = new ArrayList<>();
         if (check("RPAREN")) return params;
@@ -435,7 +435,6 @@ public class Parser {
         return params;
     }
 
-    // returnList = param { "," param }
     public List<Param> parseReturnList() {
         List<Param> params = new ArrayList<>();
         params.add(parseParam());
@@ -445,14 +444,12 @@ public class Parser {
         return params;
     }
 
-    // param = IDENT ":" type
     public Param parseParam() {
         Token t = expect("IDENT");
         expect("COLON");
-        return new Param(t.lexeme, parseType());
+        return withPos(new Param(t.lexeme, parseType()), t);
     }
 
-    // localVarList = localVar { "," localVar }
     public List<LocalVar> parseLocalVarList() {
         List<LocalVar> vars = new ArrayList<>();
         vars.add(parseLocalVar());
@@ -462,14 +459,12 @@ public class Parser {
         return vars;
     }
 
-    // localVar = IDENT [ ":" type ]
     public LocalVar parseLocalVar() {
         Token id = expect("IDENT");
         String type = match("COLON") ? parseType() : null;
-        return new LocalVar(id.lexeme, type);
+        return withPos(new LocalVar(id.lexeme, type), id);
     }
 
-    // type = IDENT [ "[" "]" ]
     public String parseType() {
         Token t = expect("IDENT");
         if (check("LBRACKET")) {

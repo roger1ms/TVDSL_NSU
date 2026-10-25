@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import parser.AST.*;
 
 import java.util.List;
 
@@ -205,7 +206,7 @@ public class ParserTest {
             Quantifier q = (Quantifier) parseFunc(code).requires;
             assertTrue(q.isForall);
             assertEquals("i", q.name);
-            assertEquals("int", q.type);
+            assertEquals("int", q.varType);
             assertInstanceOf(BinOp.class, q.pred);
         }
 

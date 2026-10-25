@@ -4,6 +4,8 @@ import lexer.DFA;
 import lexer.DFALoader;
 import lexer.Lexer;
 import lexer.Token;
+import parser.AST.*;
+import semantic.SemanticAnalyzer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,7 +29,13 @@ public class Main {
             Parser parser = new Parser(tokens);
             AST ast = parser.parseProgram();
 
-            System.out.println("=== AST ===");
+            System.out.println("=== AST (Before Semantic Analysis) ===");
+            System.out.println(ast.toString(0));
+
+            SemanticAnalyzer analyzer = new SemanticAnalyzer();
+            analyzer.analyze((Program) ast);
+
+            System.out.println("\n=== AST (After Semantic Analysis) ===");
             System.out.println(ast.toString(0));
 
         } catch (Exception e) {

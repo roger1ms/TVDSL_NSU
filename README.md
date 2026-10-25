@@ -8,6 +8,7 @@
 - `src/main/java/regex_dfa/` - Генератор автомата.
 - `src/main/java/lexer/` - Лексер. Загружает CSV, сгенерированные в regex_dfa, и разбивает текст на токены.
 - `src/main/java/parser/` - Парсер LL(1), классы AST.
+- `src/main/java/semantic/` - Семантический анализатор (HW3).
 - `src/test/java/` — Тесты.
 - `export/` - Таблицы переходов ДКА.
 - `GRAMMAR.md` - Финальная LL(1) грамматика языка Funny.
@@ -47,5 +48,20 @@ mvn compile exec:java -Dexec.mainClass="parser.Main" -Dexec.args="input.funny"
 
 Для запуска из IDE:
 1. Откройте `src/main/java/parser/Main.java`
+2. В конфигурации к запуску укажите в **Program arguments** `input.funny` с вашим кодом, убедитесь, что файл лежит в корне
+3. Запустите программу
+
+### 4. Запуск семантического анализатора
+Запускается автоматически при запуске `parser.Main`
+
+Также можно запустить отдельно для проверки.\
+Из консоли:
+```bash
+mvn compile exec:java -Dexec.mainClass="semantic.Main" -Dexec.args="input.funny"
+```
+(`input.funny` - путь к файлу с кодом на языке Funny, в корне проекта, пример: `f(a: int[], n: int) requires n > 0 returns r: int ensures forall (i: int | i >= 0 and i < n -> a[i] > 0) { r = 0; }`)
+
+Для запуска из IDE:
+1. Откройте `src/main/java/semantic/Main.java`
 2. В конфигурации к запуску укажите в **Program arguments** `input.funny` с вашим кодом, убедитесь, что файл лежит в корне
 3. Запустите программу
