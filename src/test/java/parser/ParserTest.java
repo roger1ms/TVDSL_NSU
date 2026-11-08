@@ -315,11 +315,11 @@ public class ParserTest {
             Function f = parseFunc(code);
             assertEquals(2, f.params.size());
             assertEquals(2, f.returns.size());
-            assertEquals("int[]", f.params.get(0).type);
-            assertEquals("int[]", f.returns.get(1).type);
+            assertEquals("int[]", f.params.get(0).typeName);
+            assertEquals("int[]", f.returns.get(1).typeName);
             assertEquals(2, f.uses.size());
-            assertNull(f.uses.get(0).type);
-            assertEquals("int", f.uses.get(1).type);
+            assertNull(f.uses.get(0).typeName);
+            assertEquals("int", f.uses.get(1).typeName);
         }
 
         @Test
@@ -351,9 +351,9 @@ public class ParserTest {
         void testParamAndReturnTypes() {
             String code = "f(x: int[]) returns a: int, b: int[] { a = 1; b = x; }";
             Function f = parseFunc(code);
-            assertEquals("int[]", f.params.get(0).type);
-            assertEquals("int", f.returns.get(0).type);
-            assertEquals("int[]", f.returns.get(1).type);
+            assertEquals("int[]", f.params.get(0).typeName);
+            assertEquals("int", f.returns.get(0).typeName);
+            assertEquals("int[]", f.returns.get(1).typeName);
         }
     }
 
@@ -415,6 +415,31 @@ public class ParserTest {
 
     @Nested
     class RecoveryTests {
+
+        @Test
+        void testParenthesesAndLength() {
+            String code = "f(a: int[], x: int) requires (x > 0) returns r: int "
+                    + "{ if ((x + 1) > 0) r = length(a); }";
+            Parser parser = new Parser(new Lexer(dfa, code).tokenize());
+            Program p = (Program) parser.parseProgram();
+            assertTrue(parser.getErrors().isEmpty());
+            Function f = (Function) p.items.getFirst();
+            assertInstanceOf(Compare.class, f.requires);
+            If stmt = (If) ((Block) f.body).stmts.getFirst();
+            assertInstanceOf(Compare.class, stmt.cond);
+            assertEquals("length", ((Call) ((Assign) stmt.then).value).name);
+        }
+
+        @Test
+        void testErrorsDoNotLoopAndAreReported() {
+            for (String input : List.of("f(", "f() returns r: int { r == 1; }", "; ; ;", "f() returns r: int {} ;")) {
+                assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () -> {
+                    Parser parser = new Parser(new Lexer(dfa, input).tokenize());
+                    parser.parseProgram();
+                    assertFalse(parser.getErrors().isEmpty());
+                });
+            }
+        }
 
         @Test
         void testRecoverNextFunction() {

@@ -8,6 +8,13 @@ import java.util.*;
 public class Parser {
     private List<Token> tokens;
     private int pos;
+    private final List<String> errors = new ArrayList<>();
+    // Внутри скобок допустимы и выражения, и условия, и предикаты (контракты).
+    // Флаг говорит единственной продукции "(" в parseAtom, что именно разбирать,
+    // поэтому пробный разбор с откатом не нужен.
+    private boolean predicateMode = false;
+
+    public List<String> getErrors() { return Collections.unmodifiableList(errors); }
 
     public Parser(List<Token> tokens) {
         this.tokens = tokens;
@@ -44,7 +51,6 @@ public class Parser {
         return getAndNext();
     }
 
-    // Вспомогательный метод для установки позиции
     private <T extends AST> T withPos(T node, Token t) {
         node.line = t.line;
         node.col = t.col;
@@ -90,12 +96,20 @@ public class Parser {
         }
         if (check("LPAREN")) {
             getAndNext();
-            AST e = parseAddExpr();
+            // Единственная продукция для "(". Внутри может быть выражение, условие
+            // (requires (x > 0)) или предикат (в контрактах). Разбор самого общего
+            // случая здесь, на нижнем уровне арифметики, снимает необходимость
+            // пробовать альтернативы и откатываться: `+ - * /`, сравнения и
+            // логические операторы продолжаются естественно после ")".
+            AST e = predicateMode ? parsePredicate() : parseCondition();
             expect("RPAREN");
             return e;
         }
-        if (check("IDENT")) {
+        if (check("IDENT") || check("LENGTH")) {
             getAndNext();
+            if (t.name.equals("LENGTH") && !check("LPAREN")) {
+                throw new ParseError("expected LPAREN after length at " + t.line + ":" + t.col);
+            }
             if (check("LBRACKET")) {
                 getAndNext();
                 AST idx = parseAddExpr();
@@ -121,7 +135,15 @@ public class Parser {
     //  Conditions
     // ============================================================
 
-    public AST parseCondition() { return parseImpl(); }
+    public AST parseCondition() {
+        boolean saved = predicateMode;
+        predicateMode = false;
+        try {
+            return parseImpl();
+        } finally {
+            predicateMode = saved;
+        }
+    }
 
     public AST parseImpl() {
         AST left = parseOrExpr();
@@ -177,12 +199,8 @@ public class Parser {
             getAndNext();
             return withPos(new BoolLit(false), t);
         }
-        if (check("LPAREN")) {
-            getAndNext();
-            AST cond = parseCondition();
-            expect("RPAREN");
-            return cond;
-        }
+        // Скобки обрабатываются в parseAtom как единственная продукция "(", поэтому
+        // здесь отдельный случай с пробным разбором больше не нужен.
         return parseComparison();
     }
 
@@ -202,7 +220,15 @@ public class Parser {
     //  Predicates
     // ============================================================
 
-    public AST parsePredicate() { return parsePredImpl(); }
+    public AST parsePredicate() {
+        boolean saved = predicateMode;
+        predicateMode = true;
+        try {
+            return parsePredImpl();
+        } finally {
+            predicateMode = saved;
+        }
+    }
 
     public AST parsePredImpl() {
         AST left = parsePredOr();
@@ -267,20 +293,16 @@ public class Parser {
             expect("PIPE");
             AST predicate = parsePredicate();
             expect("RPAREN");
-            return withPos(new Quantifier(isForall, p.name, p.type, predicate), startTok);
+            return withPos(new Quantifier(isForall, p.name, p.typeName, predicate), startTok);
         }
-        if (check("IDENT") && peek(1).name.equals("LPAREN")) {
-            Token id = getAndNext();
-            getAndNext();
-            List<AST> args = new ArrayList<>();
-            if (!check("RPAREN")) {
-                args.add(parseAddExpr());
-                while (match("COMMA")) args.add(parseAddExpr());
-            }
-            expect("RPAREN");
-            return withPos(new FormulaRef(id.lexeme, args), id);
+        // Скобки и вызовы обрабатываются общим путём через parseComparison/parseAtom
+        // (единственная продукция "("), поэтому пробный разбор с откатом не нужен.
+        Token start = peek();
+        AST comparison = parseComparison();
+        if (comparison instanceof Call call) {
+            return withPos(new FormulaRef(call.name, call.args), start);
         }
-        return parseComparison();
+        return comparison;
     }
 
     // ============================================================
@@ -360,6 +382,22 @@ public class Parser {
         Token id = expect("IDENT");
         AST target = withPos(new Ident(id.lexeme), id);
 
+        if (check("COMMA")) {
+            List<Ident> targets = new ArrayList<>();
+            targets.add((Ident) target);
+            while (match("COMMA")) {
+                Token next = expect("IDENT");
+                targets.add(withPos(new Ident(next.lexeme), next));
+            }
+            expect("ASSIGN");
+            AST rhs = parseAtom();
+            if (!(rhs instanceof Call call)) {
+                throw new ParseError("expected function call in tuple assignment at " + id.line + ":" + id.col);
+            }
+            expect("SEMI");
+            return withPos(new TupleAssign(targets, call), id);
+        }
+
         if (check("LBRACKET")) {
             getAndNext();
             AST idx = parseAddExpr();
@@ -381,8 +419,9 @@ public class Parser {
         List<AST> items = new ArrayList<>();
         while (!check("EOF")) {
             try {
-                items.add(parseFunction());
+                items.add(isFormulaDefinition() ? parseFormula() : parseFunction());
             } catch (ParseError e) {
+                errors.add(e.getMessage());
                 System.err.println("Syntax Error: " + e.getMessage());
                 int braces = 0;
                 boolean skipped = false;
@@ -405,6 +444,28 @@ public class Parser {
             }
         }
         return new Program(items);
+    }
+
+    private boolean isFormulaDefinition() {
+        if (!check("IDENT") || !peek(1).name.equals("LPAREN")) return false;
+        int depth = 0;
+        for (int i = pos + 1; i < tokens.size(); i++) {
+            String name = tokens.get(i).name;
+            if (name.equals("LPAREN")) depth++;
+            else if (name.equals("RPAREN") && --depth == 0) {
+                return i + 1 < tokens.size() && tokens.get(i + 1).name.equals("FATARROW");
+            }
+        }
+        return false;
+    }
+
+    public AST parseFormula() {
+        Token start = expect("IDENT");
+        expect("LPAREN");
+        List<Param> params = parseParamList();
+        expect("RPAREN");
+        expect("FATARROW");
+        return withPos(new Formula(start.lexeme, params, parsePredicate()), start);
     }
 
     public AST parseFunction() {

@@ -9,6 +9,6 @@ public class BoolLit extends AST {
 
     @Override
     public String toString(int indent) {
-        return pad(indent) + "BoolLit(" + value + ")";
+        return pad(indent) + "BoolLit(" + value + ")" + (type != null ? " : " + type : "");
     }
 }

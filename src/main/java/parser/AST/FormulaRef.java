@@ -14,7 +14,8 @@ public class FormulaRef extends AST {
     @Override
     public String toString(int indent) {
         StringBuilder sb = new StringBuilder();
-        sb.append(pad(indent)).append("FormulaRef(").append(name).append(")\n");
+        sb.append(pad(indent)).append("FormulaRef(").append(name).append(")")
+                .append(type != null ? " : " + type : "").append("\n");
         for (AST a : args) sb.append(a.toString(indent + 1)).append("\n");
         return sb.toString();
     }

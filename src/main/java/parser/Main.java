@@ -34,6 +34,9 @@ public class Main {
 
             SemanticAnalyzer analyzer = new SemanticAnalyzer();
             analyzer.analyze((Program) ast);
+            for (String error : analyzer.getErrors()) {
+                System.err.println("Semantic Error: " + error);
+            }
 
             System.out.println("\n=== AST (After Semantic Analysis) ===");
             System.out.println(ast.toString(0));

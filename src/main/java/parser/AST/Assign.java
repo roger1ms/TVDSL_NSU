@@ -13,6 +13,6 @@ public class Assign extends AST {
     public String toString(int indent) {
         return pad(indent) + "Assign:\n"
                 + pad(indent + 1) + "target:\n" + target.toString(indent + 2) + "\n"
-                + pad(indent + 1) + "value:\n" + value.toString(indent + 2);
+                + pad(indent + 1) + "value:\n" + value.toString(indent + 2) + "\n";
     }
 }

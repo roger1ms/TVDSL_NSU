@@ -12,7 +12,8 @@ public class UnOp extends AST {
     @Override
     public String toString(int indent) {
         StringBuilder sb = new StringBuilder();
-        sb.append(pad(indent)).append("UnOp(").append(op).append(")\n");
+        sb.append(pad(indent)).append("UnOp(").append(op).append(")")
+                .append(type != null ? " : " + type : "").append("\n");
         sb.append(operand.toString(indent + 1)).append("\n");
         return sb.toString();
     }
