@@ -35,7 +35,7 @@ public class SemanticAnalyzerTest {
     private void assertErrorWithPos(List<String> errors, String expectedMsg) {
         assertFalse(errors.isEmpty(), "Ожидалась ошибка: " + expectedMsg);
         boolean found = errors.stream().anyMatch(e ->
-                e.contains(":") && e.contains(expectedMsg)
+                e.matches("^\\[\\d+:\\d+\\] .*" ) && e.contains(expectedMsg)
         );
         assertTrue(found, "Не найдена ошибка с позицией и текстом: " + expectedMsg + " в " + errors);
     }
@@ -72,6 +72,66 @@ public class SemanticAnalyzerTest {
 
     @Nested
     class NegativeTests {
+
+        @Test
+        void testPreviouslySilentErrors() {
+            assertErrorWithPos(analyze("f() returns r: int { r = -missing; }"), "Undeclared variable: missing");
+            assertErrorWithPos(analyze("f() returns r: int { assert not 1; }"), "Unary 'not' requires bool");
+            assertErrorWithPos(analyze("f() returns r: int { assert missing(1); }"), "Undeclared formula: missing");
+            assertErrorWithPos(analyze("f() returns r: int uses x { r = x; }"), "has not been inferred");
+            assertErrorWithPos(analyze("f() returns r: int uses x { r = 0; }"), "Cannot infer type");
+        }
+
+        @Test
+        void testFormulaAndTupleReturn() {
+            String code = "positive(x: int) => x > 0 "
+                    + "pair(x: int) returns a: int, b: int { a = x; b = x + 1; } "
+                    + "f(x: int) requires (positive(x)) returns r: int uses y: int { r, y = pair(x); assert positive(y); }";
+            assertTrue(analyze(code).isEmpty());
+        }
+
+        @Test
+        void testUnknownTypeOnlyOnceWithPosition() {
+            List<String> errors = analyze("f() returns r: mystery { r = 0; }");
+            assertEquals(1, errors.size());
+            assertTrue(errors.getFirst().startsWith("[1:13] "));
+        }
+
+        @Test
+        void testInferenceAndLength() {
+            assertTrue(analyze("f(a: int[]) returns r: int uses x { x = length(a); r = -x; assert not false; }").isEmpty());
+            assertErrorWithPos(analyze("f() returns r: int { r = length(1); }"), "expects int[]");
+            assertErrorWithPos(analyze("f() returns r: int uses x { x = 1; x = length(1); }"), "expects int[]");
+        }
+
+        @Test
+        void testErrorsInsideInvalidCallAreNotLost() {
+            List<String> errors = analyze("f() returns r: int { r = missing(unknown); }");
+            assertErrorWithPos(errors, "Undeclared variable: unknown");
+            assertErrorWithPos(errors, "Undeclared function: missing");
+        }
+
+        @Test
+        void testFormulaAndTupleErrors() {
+            assertErrorWithPos(analyze("p(x: int) => x > 0 f(a: int[]) requires p(a) returns r: int { r = 0; }"), "expects int");
+            assertErrorWithPos(analyze("g() returns a: int, b: int { a = 1; b = 2; } f() returns r: int { r = g(); }"), "exactly one return");
+            assertErrorWithPos(analyze("g() returns a: int { a = 1; } f() returns r: int uses x: int { r, x = g(); }"), "targets");
+        }
+
+        @Test
+        void testExpressionTypesIncludeErrors() {
+            Program program = (Program) new Parser(new Lexer(dfa,
+                    "f() returns r: int { r = -missing; assert not true; }").tokenize()).parseProgram();
+            SemanticAnalyzer analyzer = new SemanticAnalyzer();
+            analyzer.analyze(program);
+            var body = (parser.AST.Block) ((parser.AST.Function) program.items.getFirst()).body;
+            var unary = (parser.AST.UnOp) ((parser.AST.Assign) body.stmts.getFirst()).value;
+            assertEquals(PrimitiveType.ERROR, unary.type);
+            assertEquals(PrimitiveType.ERROR, unary.operand.type);
+            var not = (parser.AST.UnOp) ((parser.AST.Assert) body.stmts.get(1)).pred;
+            assertEquals(PrimitiveType.BOOL, not.type);
+            assertEquals(PrimitiveType.BOOL, not.operand.type);
+        }
         @Test
         void testUndeclaredVariable() {
             List<String> errors = analyze("f() returns r: int { r = x; }");
@@ -129,8 +189,9 @@ public class SemanticAnalyzerTest {
         @Test
         void testDuplicateLocalVar() {
             List<String> errors = analyze("f() returns r: int uses x, x: int { r = 0; }");
-            assertEquals(1, errors.size());
+            assertEquals(2, errors.size());
             assertErrorWithPos(errors, "Local variable 'x' is already defined");
+            assertErrorWithPos(errors, "Cannot infer type of local variable 'x'");
         }
 
         @Test

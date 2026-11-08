@@ -22,7 +22,7 @@ public class Main {
                 return;
             }
         } else {
-            sourceCode = "f(x: int) returns r: int { r = x + 1; a }";
+            sourceCode = "f(x: int) returns r: int uses b { r = x + 1; b = r + 1; }";
             System.out.println("Тестовый код:\n" + sourceCode + "\n");
         }
 

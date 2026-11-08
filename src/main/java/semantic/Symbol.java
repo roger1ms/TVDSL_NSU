@@ -1,7 +1,5 @@
 package semantic;
 
-import com.sun.source.tree.TypeCastTree;
-
 public class Symbol {
     public String name;
     public Type type;
