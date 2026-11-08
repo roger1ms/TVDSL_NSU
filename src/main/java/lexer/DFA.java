@@ -8,4 +8,8 @@ public class DFA {
     public Map<Integer, Integer> acceptTokenId = new HashMap<>();
     public List<String> tokenNames = new ArrayList<>();
     public Set<Integer> allStates = new HashSet<>();
+
+    public int nextState(int state, char c) {
+        return c >= 128 ? trap : transitions.getOrDefault(state, Map.of()).getOrDefault(c, trap);
+    }
 }

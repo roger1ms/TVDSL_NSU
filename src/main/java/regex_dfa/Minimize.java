@@ -16,8 +16,8 @@ public class Minimize {
         }
 
         Set<Set<Integer>> P = new HashSet<>();
-        for (var e : group.entrySet()) {
-            P.add(Set.copyOf(e.getValue()));
+        for (Set<Integer> s : group.values()) {
+            P.add(Set.copyOf(s));
         }
 
         Queue<Map.Entry<Set<Integer>, Character>> W = new LinkedList<>();
@@ -45,8 +45,12 @@ public class Minimize {
                     P.add(canImm);
                     P.add(cantImm);
                     for (char c : alphabet) {
-                        W.offer(Map.entry(canImm, c));
-                        W.offer(Map.entry(cantImm, c));
+                        if (W.remove(Map.entry(set2, c))) {
+                            W.offer(Map.entry(canImm, c));
+                            W.offer(Map.entry(cantImm, c));
+                        } else {
+                            W.offer(Map.entry(canImm.size() <= cantImm.size() ? canImm : cantImm, c));
+                        }
                     }
                 }
             }

@@ -31,45 +31,4 @@ public class DFA {
             else cantReach.add(fromState);
         }
     }
-
-    public String run(String input) {
-        int state = start;
-        for (char c : input.toCharArray()) {
-            if (state == trap) return "ERROR";
-            Integer next = transitions.getOrDefault(state, Map.of()).get(c);
-            if (next == null) return "ERROR";
-            state = next;
-        }
-        Integer tokenId = acceptTokenId.get(state);
-        return (tokenId == null) ? "ERROR" : tokenNames.get(tokenId);
-    }
-
-    public void print() {
-        System.out.println("DFA");
-        System.out.println("start: " + start);
-        System.out.println("trap: " + trap);
-        System.out.println("states: " + size());
-        System.out.println("accepting (state → tokenId): " + acceptTokenId);
-        System.out.println("tokenNames: " + tokenNames);
-        System.out.println("transitions (only non-trap):");
-        for (int s = 0; s < size(); s++) {
-            Map<Character, Integer> row = transitions.getOrDefault(s, Map.of());
-            StringBuilder sb = new StringBuilder();
-            for (var e : row.entrySet()) {
-                if (e.getValue() == trap) continue;
-                sb.append("'").append(escape(e.getKey())).append("'→").append(e.getValue()).append(" ");
-            }
-            if (!sb.isEmpty()) {
-                System.out.println("  " + s + ": " + sb.toString().trim());
-            }
-        }
-    }
-
-    private static String escape(char c) {
-        if (c == '\t') return "\\t";
-        if (c == '\n') return "\\n";
-        if (c == '\r') return "\\r";
-        if (c == ' ')  return "␣";
-        return String.valueOf(c);
-    }
 }

@@ -2,6 +2,8 @@ package regex_dfa;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Main {
     public static List<Token> defineTokens() {
@@ -35,8 +37,12 @@ public class Main {
                 Node.alt(Node.ch('0'), Node.concat(Node.arr("1-9"), Node.star(Node.arr("0-9")))),
                 false));
         tokens.add(new Token("WS", Node.plus(Node.arr(" \t\r\n")), true));
+        Set<Character> commentChars = new HashSet<>();
+        for (char c = 0; c < 128; c++) {
+            if (c != '\n' && c != '\r') commentChars.add(c);
+        }
         tokens.add(new Token("COMMENT",
-                Node.concat(Node.str("//"), Node.star(Node.arr(" -~"))),
+                Node.concat(Node.str("//"), Node.star(new Node.CharSet(commentChars))),
                 true));
 
         tokens.add(new Token("EQ",       Node.str("=="), false));
@@ -68,7 +74,6 @@ public class Main {
 
     public static void main(String[] args) {
         List<Token> tokens = defineTokens();
-
         NFA nfa = new ThompsonBuilder().union(tokens);
         DFA dfa = new SubsetConstruction().buildDFA(nfa);
         DFA minDfa = new Minimize().minimize(dfa);

@@ -12,7 +12,7 @@ public class TrapAdder {
 
         int trap = dfa.newState();
         dfa.trap = trap;
-        for (int state : new ArrayList<>(dfa.allStates)) {
+        for (int state : dfa.allStates) {
             if (state == trap) continue;
             for (char c : alphabet) {
                 if (!dfa.transitions.getOrDefault(state, Map.of()).containsKey(c)) {

@@ -23,6 +23,22 @@ public class LexerTest {
         return new Lexer(dfa, input).tokenize();
     }
 
+    @Test
+    void generatedAutomatonRoundTripsThroughCsv(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        var definitions = regex_dfa.Main.defineTokens();
+        var nfa = new regex_dfa.ThompsonBuilder().union(definitions);
+        var original = new regex_dfa.SubsetConstruction().buildDFA(nfa);
+        var minimized = new regex_dfa.Minimize().minimize(original);
+        minimized.tokenNames = definitions.stream().map(t -> t.name).toList();
+        new regex_dfa.TrapAdder().addTrap(minimized);
+        regex_dfa.DFAExporter.exportCsv(minimized, dir.toString());
+        DFA generated = DFALoader.load(dir.toString());
+        var result = new Lexer(generated, "//a\tb\r\nif _x == 01").tokenize();
+        assertEquals(List.of("IF", "IDENT", "EQ", "INT", "INT", "EOF"),
+                result.stream().map(t -> t.name).toList());
+        assertEquals(generated.trap, generated.nextState(generated.start, 'ы'));
+    }
+
     @Nested
     class BasicTokens {
         @Test
@@ -59,6 +75,17 @@ public class LexerTest {
             List<Token> tokens = tokenize("0");
             assertEquals("INT", tokens.get(0).name);
             assertEquals("0", tokens.get(0).lexeme);
+        }
+
+        @Test
+        void testLeadingZerosAreSeparateTokens() {
+            for (String text : List.of("00", "01")) {
+                List<Token> tokens = tokenize(text);
+                assertEquals(List.of("0", text.substring(1), ""),
+                        tokens.stream().map(t -> t.lexeme).toList());
+                assertEquals(List.of("INT", "INT", "EOF"),
+                        tokens.stream().map(t -> t.name).toList());
+            }
         }
 
         @Test
@@ -119,6 +146,13 @@ public class LexerTest {
         }
 
         @Test
+        void testCommentWithTabsAndCrLf() {
+            List<Token> tokens = tokenize("// a\tb\r\nx");
+            assertEquals(List.of("x", ""), tokens.stream().map(t -> t.lexeme).toList());
+            assertEquals(2, tokens.get(0).line);
+        }
+
+        @Test
         void testComplexWhitespace() {
             List<Token> tokens = tokenize("  \t  if \r\n  (  x )  ");
             assertEquals(5, tokens.size()); // if, (, x, ), EOF
@@ -167,6 +201,11 @@ public class LexerTest {
         void testNonAscii() {
             List<Token> tokens = tokenize("ы");
             assertEquals("ERROR", tokens.get(0).name);
+        }
+
+        @Test
+        void testNonAsciiTransitionEntersTrapFromEveryState() {
+            for (int state : dfa.allStates) assertEquals(dfa.trap, dfa.nextState(state, 'ы'));
         }
 
         @Test

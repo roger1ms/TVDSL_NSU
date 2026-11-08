@@ -41,8 +41,7 @@ public class Lexer {
 
         while (i < input.length()) {
             char c = input.charAt(i);
-            if (c >= 128) break;
-            state = dfa.transitions.get(state).get(c);
+            state = dfa.nextState(state, c);
             if (state == dfa.trap) break;
             i++;
             Integer tokenId = dfa.acceptTokenId.get(state);
